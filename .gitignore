@@ -11,3 +11,5 @@ Cargo.lock
 
 # vim swap files
 *.swp
+
+**/*.idea
