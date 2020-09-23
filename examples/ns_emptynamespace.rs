@@ -3,7 +3,7 @@
 fn main() -> Result<(), fasteval::Error> {
     let mut ns = fasteval::EmptyNamespace;
 
-    let val = fasteval::ez_eval("sin(pi()/2)", &mut ns)?;
+    let val: f64 = fasteval::ez_eval("sin(pi()/2)", &mut ns)?;
     assert_eq!(val, 1.0);
 
     Ok(())

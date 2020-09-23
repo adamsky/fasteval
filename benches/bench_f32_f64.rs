@@ -8,8 +8,6 @@
 //     while true; do echo "time: $(date +%s)"; cat benches/bench.rs.tmpl | sed "s|//SHIFT_CODE|$( N=$(( 1 + $RANDOM % 1024 )); while [[ $N > 0 ]]; do N=$(( $N - 1 )); echo -n 'let x=black_box(x+1);'; done )|g" >benches/bench.rs; RUSTFLAGS="--emit=asm" cargo bench --features unsafe-vars; done >bench.out
 //     cat bench.out | awk -v "now=$(date +%s)" '$1=="time:"{when=$2}  $3=="..." && $4=="bench:" {gsub(/,/, "", $5); v=$5+0; if (t[$2]=="" || v<t[$2]){t[$2]=v; w[$2]=when;}} END{for (k in t) { printf "%-40s %9d ns/iter    %5ds ago\n",k,t[k],now-w[k] }}' | sort
 
-
-
 // ---- Results (2019-12-04 on a 2012 laptop with Intel(R) Core(TM) i7-3610QM CPU @ 2.30GHz) ----
 // fasteval:
 //     "(3 * (3 + 3) / 3)"
@@ -440,82 +438,100 @@
 //     test parse_eval    ... bench:      24,555 ns/iter (+/- 6,041)
 //     test preparse_eval ... bench:       1,491 ns/iter (+/- 146)
 
-
-
-
 #![feature(test)]
-extern crate test;  // 'extern crate' seems to be required for this scenario: https://github.com/rust-lang/rust/issues/57288
-use test::{Bencher, black_box};
+extern crate test; // 'extern crate' seems to be required for this scenario: https://github.com/rust-lang/rust/issues/57288
+use test::{black_box, Bencher};
 
-use fasteval::{Parser, Compiler, Evaler, Slab, EmptyNamespace, CachedCallbackNamespace, ez_eval, eval_compiled, eval_compiled_ref};
+use fasteval::{
+    eval_compiled, eval_compiled_ref, ez_eval, CachedCallbackNamespace, Compiler, EmptyNamespace,
+    Evaler, Parser, Slab,
+};
 
 use std::collections::BTreeMap;
 use std::f64::NAN;
 
-
-//fn evalcb(_:&str) -> Option<f64> { None }
-fn evalcb(name:&str, args:Vec<f64>) -> Option<f64> {
+fn evalcb_f32(name: &str, args: Vec<f32>) -> Option<f32> {
     match name {
         "x" => Some(1.0),
         "y" => Some(2.0),
         "z" => Some(3.0),
-        "foo" => Some(args.get(0).unwrap_or(&NAN)*10.0),
+        "foo" => Some(args.get(0).unwrap_or(&f32::NAN) * 10.0),
+        "bar" => Some(args.get(0).unwrap_or(&f32::NAN) + args.get(1).unwrap_or(&f32::NAN)),
+        _ => None,
+    }
+}
+//fn evalcb(_:&str) -> Option<f64> { None }
+fn evalcb_f64(name: &str, args: Vec<f64>) -> Option<f64> {
+    match name {
+        "x" => Some(1.0),
+        "y" => Some(2.0),
+        "z" => Some(3.0),
+        "foo" => Some(args.get(0).unwrap_or(&NAN) * 10.0),
         "bar" => Some(args.get(0).unwrap_or(&NAN) + args.get(1).unwrap_or(&NAN)),
         _ => None,
     }
 }
 
-macro_rules! Namespace {
-    () => {
-        {
-            let mut map = BTreeMap::new();
-            map.insert("x".to_string(), 1.0);
-            map.insert("y".to_string(), 2.0);
-            map.insert("z".to_string(), 3.0);
-            map
-        }
-
-        //EmptyNamespace
+macro_rules! Namespace_f32 {
+    () => {{
+        let mut map = BTreeMap::new();
+        map.insert("x".to_string(), 1.0f32);
+        map.insert("y".to_string(), 2.0f32);
+        map.insert("z".to_string(), 3.0f32);
+        map
+    }}; //EmptyNamespace
 
         //CachedCallbackNamespace::new(evalcb)
 
-        //CachedLayeredNamespace::new(evalcb)
-    }
+        //CachedLayeredNamespace::new(evalcb)};
+}
+macro_rules! Namespace_f64 {
+    () => {{
+        let mut map = BTreeMap::new();
+        map.insert("x".to_string(), 1.0f64);
+        map.insert("y".to_string(), 2.0f64);
+        map.insert("z".to_string(), 3.0f64);
+        map
+    }}; //EmptyNamespace
+
+        //CachedCallbackNamespace::new(evalcb)
+
+        //CachedLayeredNamespace::new(evalcb)};
 }
 
 macro_rules! memshift {
-    () => {
-        {
-            let x = black_box(0);
-            let x = black_box(x+1);
+    () => {{
+        let x = black_box(0);
+        let x = black_box(x + 1);
 
-            //SHIFT_CODE
+        //SHIFT_CODE
 
-            black_box(x);  // Silence 'unused variable' warning.
-        }
-    }
+        black_box(x); // Silence 'unused variable' warning.
+    }};
 }
 
 //static EXPR : &'static str = "(3 * (3 + 3) / 3)";
-static EXPR : &'static str = "3 * 3 - 3 / 3";
+static EXPR: &'static str = "3 * 3 - 3 / 3";
 //static EXPR : &'static str = "2 ^ 3 ^ 4";
 //static EXPR : &'static str = "x * 2";
 //static EXPR : &'static str = "sin(x)";
 //static EXPR : &'static str = "(-z + (z^2 - 4*x*y)^0.5) / (2*x)";
-// static EXPR : &'static str = "((((87))) - 73) + (97 + (((15 / 55 * ((31)) + 35))) + (15 - (9)) - (39 / 26) / 20 / 91 + 27 / (33 * 26 + 28 - (7) / 10 + 66 * 6) + 60 / 35 - ((29) - (69) / 44 / (92)) / (89) + 2 + 87 / 47 * ((2)) * 83 / 98 * 42 / (((67)) * ((97))) / (34 / 89 + 77) - 29 + 70 * (20)) + ((((((92))) + 23 * (98) / (95) + (((99) * (41))) + (5 + 41) + 10) - (36) / (6 + 80 * 52 + (90))))";
+//static EXPR : &'static str = "((((87))) - 73) + (97 + (((15 / 55 * ((31)) + 35))) + (15 - (9)) - (39 / 26) / 20 / 91 + 27 / (33 * 26 + 28 - (7) / 10 + 66 * 6) + 60 / 35 - ((29) - (69) / 44 / (92)) / (89) + 2 + 87 / 47 * ((2)) * 83 / 98 * 42 / (((67)) * ((97))) / (34 / 89 + 77) - 29 + 70 * (20)) + ((((((92))) + 23 * (98) / (95) + (((99) * (41))) + (5 + 41) + 10) - (36) / (6 + 80 * 52 + (90))))";
 
 #[bench]
-fn native_1000x(bencher:&mut Bencher) {
+fn native_1000x_f32(bencher: &mut Bencher) {
     memshift!();
 
     // Silence compiler warnings about unused imports:
-    let _ = EmptyNamespace;  let _: CachedCallbackNamespace<f64> = CachedCallbackNamespace::new(|_,_| None);
-
+    let _ = EmptyNamespace;
+    let _: CachedCallbackNamespace<f32> = CachedCallbackNamespace::new(|_, _| None);
 
     #[allow(dead_code)]
-    fn x() -> f64 { black_box(1.0) }
+    fn x() -> f32 {
+        black_box(1.0)
+    }
     #[allow(unused_variables)]
-    let (a,b,c) = (1.0f64, 3.0f64, 2.0f64);
+    let (a, b, c) = (1.0f32, 3.0f32, 2.0f32);
     bencher.iter(|| {
         //let (a,b,c) = (a,b,c);  // Localize
         for _ in 0..1000 {
@@ -525,19 +541,62 @@ fn native_1000x(bencher:&mut Bencher) {
             //black_box(x() * 2.0);
             //black_box(x().sin());
             //black_box( (-b + (b.powf(2.0) - 4.0*a*c).powf(0.5)) / (2.0*a) );
-            black_box( ((((87.))) - 73.) + (97. + (((15. / 55. * ((31.)) + 35.))) + (15. - (9.)) - (39. / 26.) / 20. / 91. + 27. / (33. * 26. + 28. - (7.) / 10. + 66. * 6.) + 60. / 35. - ((29.) - (69.) / 44. / (92.)) / (89.) + 2. + 87. / 47. * ((2.)) * 83. / 98. * 42. / (((67.)) * ((97.))) / (34. / 89. + 77.) - 29. + 70. * (20.)) + ((((((92.))) + 23. * (98.) / (95.) + (((99.) * (41.))) + (5. + 41.) + 10.) - (36.) / (6. + 80. * 52. + (90.)))) );
+            black_box(EXPR);
+        }
+    });
+}
+#[bench]
+fn native_1000x_f64(bencher: &mut Bencher) {
+    memshift!();
+
+    // Silence compiler warnings about unused imports:
+    let _ = EmptyNamespace;
+    let _: CachedCallbackNamespace<f64> = CachedCallbackNamespace::new(|_, _| None);
+
+    #[allow(dead_code)]
+    fn x() -> f64 {
+        black_box(1.0)
+    }
+    #[allow(unused_variables)]
+    let (a, b, c) = (1.0f64, 3.0f64, 2.0f64);
+    bencher.iter(|| {
+        //let (a,b,c) = (a,b,c);  // Localize
+        for _ in 0..1000 {
+            //black_box(3.0 * (3.0 + 3.0) / 3.0);
+            //black_box(3.0 * 3.0 - 3.0 / 3.0);
+            //black_box(2.0f64.powf(3.0).powf(4.0));
+            //black_box(x() * 2.0);
+            //black_box(x().sin());
+            //black_box( (-b + (b.powf(2.0) - 4.0*a*c).powf(0.5)) / (2.0*a) );
+            black_box(EXPR);
         }
     });
 }
 
 #[bench]
-fn ez(b:&mut Bencher) {
+fn ez_f32(b: &mut Bencher) {
     memshift!();
 
-    let mut vars=BTreeMap::new();
-    vars.insert("x".to_string(),1.0);
-    vars.insert("y".to_string(),2.0);
-    vars.insert("z".to_string(),3.0);
+    let mut vars = BTreeMap::new();
+    vars.insert("x".to_string(), 1.0);
+    vars.insert("y".to_string(), 2.0);
+    vars.insert("z".to_string(), 3.0);
+
+    b.iter(|| {
+        black_box(match ez_eval(EXPR, &mut vars) {
+            Ok(f) => f,
+            Err(_) => 0.0f32,
+        });
+    });
+}
+#[bench]
+fn ez_f64(b: &mut Bencher) {
+    memshift!();
+
+    let mut vars = BTreeMap::new();
+    vars.insert("x".to_string(), 1.0);
+    vars.insert("y".to_string(), 2.0);
+    vars.insert("z".to_string(), 3.0);
 
     b.iter(|| {
         black_box(match ez_eval(EXPR, &mut vars) {
@@ -548,17 +607,44 @@ fn ez(b:&mut Bencher) {
 }
 
 #[bench]
-fn parse_eval_1000x(b:&mut Bencher) {
+fn parse_eval_1000x_f32(b: &mut Bencher) {
     memshift!();
 
     let parser = Parser::new();
-    let mut slab = Slab::new();
-    let mut ns = Namespace!();
+    let mut slab: Slab<f32> = Slab::new();
+    let mut ns = Namespace_f32!();
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
+        let _ = (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
-                black_box(parser.parse(EXPR, &mut slab.ps)?.from(&slab.ps).eval(&slab, &mut ns)?);
+                black_box(
+                    parser
+                        .parse(EXPR, &mut slab.ps)?
+                        .from(&slab.ps)
+                        .eval(&slab, &mut ns)?,
+                );
+            }
+            Ok(())
+        })();
+    });
+}
+#[bench]
+fn parse_eval_1000x_f64(b: &mut Bencher) {
+    memshift!();
+
+    let parser = Parser::new();
+    let mut slab: Slab<f64> = Slab::new();
+    let mut ns = Namespace_f64!();
+
+    b.iter(|| {
+        let _ = (|| -> Result<(), fasteval::Error> {
+            for _ in 0..1000 {
+                black_box(
+                    parser
+                        .parse(EXPR, &mut slab.ps)?
+                        .from(&slab.ps)
+                        .eval(&slab, &mut ns)?,
+                );
             }
             Ok(())
         })();
@@ -587,12 +673,12 @@ fn parse_eval_1000x(b:&mut Bencher) {
 // }
 
 #[bench]
-#[cfg(feature="unsafe-vars")]
-fn parse_eval_unsafe_1000x(b:&mut Bencher) {
+#[cfg(feature = "unsafe-vars")]
+fn parse_eval_unsafe_1000x_f32(b: &mut Bencher) {
     memshift!();
 
     let parser = Parser::new();
-    let mut slab = Slab::new();
+    let mut slab: Slab<f32> = Slab::new();
     let x = 1.0;
     let y = 2.0;
     let z = 3.0;
@@ -609,9 +695,50 @@ fn parse_eval_unsafe_1000x(b:&mut Bencher) {
     let mut ns = EmptyNamespace;
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
+        let _ = (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
-                black_box(parser.parse(EXPR, &mut slab.ps)?.from(&slab.ps).eval(&slab, &mut ns)?);
+                black_box(
+                    parser
+                        .parse(EXPR, &mut slab.ps)?
+                        .from(&slab.ps)
+                        .eval(&slab, &mut ns)?,
+                );
+            }
+            Ok(())
+        })();
+    });
+}
+#[bench]
+#[cfg(feature = "unsafe-vars")]
+fn parse_eval_unsafe_1000x_f64(b: &mut Bencher) {
+    memshift!();
+
+    let parser = Parser::new();
+    let mut slab: Slab<f64> = Slab::new();
+    let x = 1.0;
+    let y = 2.0;
+    let z = 3.0;
+    let foo = 0.0;
+    let bar = 0.0;
+    unsafe {
+        slab.ps.add_unsafe_var("x".to_string(), &x);
+        slab.ps.add_unsafe_var("y".to_string(), &y);
+        slab.ps.add_unsafe_var("z".to_string(), &z);
+        slab.ps.add_unsafe_var("foo".to_string(), &foo);
+        slab.ps.add_unsafe_var("bar".to_string(), &bar);
+    }
+
+    let mut ns = EmptyNamespace;
+
+    b.iter(|| {
+        let _ = (|| -> Result<(), fasteval::Error> {
+            for _ in 0..1000 {
+                black_box(
+                    parser
+                        .parse(EXPR, &mut slab.ps)?
+                        .from(&slab.ps)
+                        .eval(&slab, &mut ns)?,
+                );
             }
             Ok(())
         })();
@@ -619,39 +746,40 @@ fn parse_eval_unsafe_1000x(b:&mut Bencher) {
 }
 
 #[bench]
-fn preparse_eval_1000x(b:&mut Bencher) {
+fn preparse_eval_1000x_f32(b: &mut Bencher) {
     memshift!();
 
-    let mut slab = Slab::new();
-    let mut ns = Namespace!();
+    let mut slab: Slab<f32> = Slab::new();
+    let mut ns = Namespace_f32!();
     let expr_ref = match Parser::new().parse(EXPR, &mut slab.ps) {
         Ok(expr_i) => expr_i.from(&slab.ps),
         Err(_) => return,
     };
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
+        let _ = (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
-                black_box( expr_ref.eval(&slab, &mut ns)? );
+                black_box(expr_ref.eval(&slab, &mut ns)?);
             }
             Ok(())
         })();
     });
 }
-
 #[bench]
-fn parse_compile_eval_1000x(b:&mut Bencher) {
+fn preparse_eval_1000x_f64(b: &mut Bencher) {
     memshift!();
 
-    let parser = Parser::new();
-    let mut slab = Slab::new();
-    let mut ns = Namespace!();
+    let mut slab: Slab<f64> = Slab::new();
+    let mut ns = Namespace_f64!();
+    let expr_ref = match Parser::new().parse(EXPR, &mut slab.ps) {
+        Ok(expr_i) => expr_i.from(&slab.ps),
+        Err(_) => return,
+    };
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
+        let _ = (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
-                let instr = parser.parse(EXPR, &mut slab.ps)?.from(&slab.ps).compile(&slab.ps, &mut slab.cs);
-                black_box(eval_compiled!(instr, &slab, &mut ns));
+                black_box(expr_ref.eval(&slab, &mut ns)?);
             }
             Ok(())
         })();
@@ -659,17 +787,41 @@ fn parse_compile_eval_1000x(b:&mut Bencher) {
 }
 
 #[bench]
-fn parse_compile_eval_1000x_f32(b:&mut Bencher) {
+fn parse_compile_eval_1000x_f32(b: &mut Bencher) {
     memshift!();
 
     let parser = Parser::new();
     let mut slab: Slab<f32> = Slab::new();
-    let mut ns = Namespace!();
+    let mut ns = Namespace_f32!();
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
+        let _ = (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
-                let instr = parser.parse(EXPR, &mut slab.ps)?.from(&slab.ps).compile(&slab.ps, &mut slab.cs);
+                let instr = parser
+                    .parse(EXPR, &mut slab.ps)?
+                    .from(&slab.ps)
+                    .compile(&slab.ps, &mut slab.cs);
+                black_box(eval_compiled!(instr, &slab, &mut ns));
+            }
+            Ok(())
+        })();
+    });
+}
+#[bench]
+fn parse_compile_eval_1000x_f64(b: &mut Bencher) {
+    memshift!();
+
+    let parser = Parser::new();
+    let mut slab: Slab<f64> = Slab::new();
+    let mut ns = Namespace_f64!();
+
+    b.iter(|| {
+        let _ = (|| -> Result<(), fasteval::Error> {
+            for _ in 0..1000 {
+                let instr = parser
+                    .parse(EXPR, &mut slab.ps)?
+                    .from(&slab.ps)
+                    .compile(&slab.ps, &mut slab.cs);
                 black_box(eval_compiled!(instr, &slab, &mut ns));
             }
             Ok(())
@@ -678,61 +830,85 @@ fn parse_compile_eval_1000x_f32(b:&mut Bencher) {
 }
 
 #[bench]
-fn preparse_precompile_eval_1000x(b:&mut Bencher) {
+fn preparse_precompile_eval_1000x_f32(b: &mut Bencher) {
     memshift!();
 
-    let mut slab = Slab::new();
-    let mut ns = Namespace!();
+    let mut slab: Slab<f32> = Slab::new();
+    let mut ns = Namespace_f32!();
     let instr = match Parser::new().parse_noclear(EXPR, &mut slab.ps) {
         Ok(expr_i) => expr_i.from(&slab.ps).compile(&slab.ps, &mut slab.cs),
         Err(_) => return,
     };
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
-            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns);  // Localize (doesn't help much)
+        let _ = (|| -> Result<(), fasteval::Error> {
+            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns); // Localize (doesn't help much)
             for _ in 0..1000 {
-                black_box( eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
+                black_box(eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
             }
             Ok(())
         })();
     });
-
-    //// Produces basically the same results, proving that the --emit=asm performanace boost is not coming from this test function -- it's coming from the evaluation, and I'm not able to replicate it.
-    // let _ = (|| -> Result<(),fasteval::Error> {
-    //     let mut slab = Slab::new();
-    //     let mut ns = Namespace!();
-    //     let instr = match parse_noclear(EXPR, &mut slab.ps) {
-    //         Ok(expr_i) => expr_i.from(&slab.ps).compile(&slab.ps, &mut slab.cs),
-    //         Err(e) => return Err(e),
-    //     };
-    //
-    //     let start = std::time::Instant::now();
-    //     for _ in 0..1_000_000 {
-    //         black_box( eval_compiled_ref!(&instr, &slab, &mut ns) );
-    //     }
-    //     eprintln!("bench time: {}", start.elapsed().as_secs_f64());
-    //
-    //     Ok(())
-    // })();
 }
-
 #[bench]
-fn preparse_precompile_eval_closure_1000x(b:&mut Bencher) {
+fn preparse_precompile_eval_1000x_f64(b: &mut Bencher) {
     memshift!();
 
-    let mut slab = Slab::new();
-    let mut ns = evalcb;
+    let mut slab: Slab<f64> = Slab::new();
+    let mut ns = Namespace_f64!();
     let instr = match Parser::new().parse_noclear(EXPR, &mut slab.ps) {
         Ok(expr_i) => expr_i.from(&slab.ps).compile(&slab.ps, &mut slab.cs),
         Err(_) => return,
     };
 
     b.iter(|| {
-        let _ = (|| -> Result<(),fasteval::Error> {
-            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns);  // Localize (doesn't help much)
+        let _ = (|| -> Result<(), fasteval::Error> {
+            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns); // Localize (doesn't help much)
             for _ in 0..1000 {
-                black_box( eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
+                black_box(eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
+            }
+            Ok(())
+        })();
+    });
+}
+
+#[bench]
+fn preparse_precompile_eval_closure_1000x_f32(b: &mut Bencher) {
+    memshift!();
+
+    let mut slab: Slab<f32> = Slab::new();
+    let mut ns = evalcb_f32;
+    let instr = match Parser::new().parse_noclear(EXPR, &mut slab.ps) {
+        Ok(expr_i) => expr_i.from(&slab.ps).compile(&slab.ps, &mut slab.cs),
+        Err(_) => return,
+    };
+
+    b.iter(|| {
+        let _ = (|| -> Result<(), fasteval::Error> {
+            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns); // Localize (doesn't help much)
+            for _ in 0..1000 {
+                black_box(eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
+            }
+            Ok(())
+        })();
+    });
+}
+#[bench]
+fn preparse_precompile_eval_closure_1000x_f64(b: &mut Bencher) {
+    memshift!();
+
+    let mut slab: Slab<f64> = Slab::new();
+    let mut ns = evalcb_f64;
+    let instr = match Parser::new().parse_noclear(EXPR, &mut slab.ps) {
+        Ok(expr_i) => expr_i.from(&slab.ps).compile(&slab.ps, &mut slab.cs),
+        Err(_) => return,
+    };
+
+    b.iter(|| {
+        let _ = (|| -> Result<(), fasteval::Error> {
+            let (instr_ref, slab_ref, ns_mut) = (&instr, &slab, &mut ns); // Localize (doesn't help much)
+            for _ in 0..1000 {
+                black_box(eval_compiled_ref!(instr_ref, slab_ref, ns_mut));
             }
             Ok(())
         })();
@@ -763,11 +939,11 @@ fn preparse_precompile_eval_closure_1000x(b:&mut Bencher) {
 // }
 
 #[bench]
-#[cfg(feature="unsafe-vars")]
-fn preparse_precompile_eval_unsafe_1000x(b:&mut Bencher) {
+#[cfg(feature = "unsafe-vars")]
+fn preparse_precompile_eval_unsafe_1000x_f32(b: &mut Bencher) {
     memshift!();
 
-    let mut slab = Slab::new();
+    let mut slab: Slab<f32> = Slab::new();
     let x = 1.0;
     let y = 2.0;
     let z = 3.0;
@@ -782,15 +958,56 @@ fn preparse_precompile_eval_unsafe_1000x(b:&mut Bencher) {
     }
 
     let mut ns = EmptyNamespace;
-    let instr = Parser::new().parse_noclear(EXPR, &mut slab.ps).unwrap().from(&slab.ps).compile(&slab.ps, &mut slab.cs);
+    let instr = Parser::new()
+        .parse_noclear(EXPR, &mut slab.ps)
+        .unwrap()
+        .from(&slab.ps)
+        .compile(&slab.ps, &mut slab.cs);
 
     b.iter(|| {
-        (|| -> Result<(),fasteval::Error> {
+        (|| -> Result<(), fasteval::Error> {
             for _ in 0..1000 {
                 black_box(eval_compiled_ref!(&instr, &slab, &mut ns));
             }
             Ok(())
-        })().unwrap();
+        })()
+        .unwrap();
+    });
+}
+#[bench]
+#[cfg(feature = "unsafe-vars")]
+fn preparse_precompile_eval_unsafe_1000x_f64(b: &mut Bencher) {
+    memshift!();
+
+    let mut slab: Slab<f64> = Slab::new();
+    let x = 1.0;
+    let y = 2.0;
+    let z = 3.0;
+    let foo = 0.0;
+    let bar = 0.0;
+    unsafe {
+        slab.ps.add_unsafe_var("x".to_string(), &x);
+        slab.ps.add_unsafe_var("y".to_string(), &y);
+        slab.ps.add_unsafe_var("z".to_string(), &z);
+        slab.ps.add_unsafe_var("foo".to_string(), &foo);
+        slab.ps.add_unsafe_var("bar".to_string(), &bar);
+    }
+
+    let mut ns = EmptyNamespace;
+    let instr = Parser::new()
+        .parse_noclear(EXPR, &mut slab.ps)
+        .unwrap()
+        .from(&slab.ps)
+        .compile(&slab.ps, &mut slab.cs);
+
+    b.iter(|| {
+        (|| -> Result<(), fasteval::Error> {
+            for _ in 0..1000 {
+                black_box(eval_compiled_ref!(&instr, &slab, &mut ns));
+            }
+            Ok(())
+        })()
+        .unwrap();
     });
 }
 
@@ -845,4 +1062,3 @@ fn preparse_precompile_eval_unsafe_1000x(b:&mut Bencher) {
 //     }
 //     eprintln!("bench time: {}", start.elapsed().as_secs_f64());
 // }
-

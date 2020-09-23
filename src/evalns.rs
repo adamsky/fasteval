@@ -25,7 +25,7 @@
 //! fn main() -> Result<(), fasteval::Error> {
 //!     let mut ns = fasteval::EmptyNamespace;
 //!
-//!     let val = fasteval::ez_eval("sin(pi()/2)", &mut ns)?;
+//!     let val: f64 = fasteval::ez_eval("sin(pi()/2)", &mut ns)?;
 //!     assert_eq!(val, 1.0);
 //!
 //!     Ok(())
@@ -35,7 +35,7 @@
 //! ## StringToF64Namespace
 //! ```
 //! fn main() -> Result<(), fasteval::Error> {
-//!     let mut ns = fasteval::StringToF64Namespace::new();
+//!     let mut ns = fasteval::StringToFloatNamespace::new();
 //!     ns.insert("x".to_string(), 2.0);
 //!
 //!     let val = fasteval::ez_eval("x * (x + 1)", &mut ns)?;
@@ -48,7 +48,7 @@
 //! ## StrToF64Namespace
 //! ```
 //! fn main() -> Result<(), fasteval::Error> {
-//!     let mut ns = fasteval::StrToF64Namespace::new();
+//!     let mut ns = fasteval::StrToFloatNamespace::new();
 //!     ns.insert("x", 2.0);
 //!
 //!     let val = fasteval::ez_eval("x * (x + 1)", &mut ns)?;
@@ -142,17 +142,17 @@
 //! ## LayeredStringToF64Namespace
 //! ```
 //! fn main() -> Result<(), fasteval::Error> {
-//!     let mut layer1 = fasteval::StringToF64Namespace::new();
+//!     let mut layer1 = fasteval::StringToFloatNamespace::new();
 //!     layer1.insert("x".to_string(), 2.0);
 //!     layer1.insert("y".to_string(), 3.0);
 //!
-//!     let mut layers : fasteval::LayeredStringToF64Namespace = vec![layer1];
+//!     let mut layers : fasteval::LayeredStringToFloatNamespace<f64> = vec![layer1];
 //!
 //!     let val = fasteval::ez_eval("x * y", &mut layers)?;
 //!     assert_eq!(val, 6.0);
 //!
 //!     // Let's add another layer which shadows the previous one:
-//!     let mut layer2 = fasteval::StringToF64Namespace::new();
+//!     let mut layer2 = fasteval::StringToFloatNamespace::new();
 //!     layer2.insert("x".to_string(), 3.0);
 //!     layers.push(layer2);
 //!
@@ -185,33 +185,32 @@
 //! * CachedCallbacksNamespace  --  Same as above, but with a cache for each
 //!   layer.  Good for expensive look-ups.
 
-
-
 use crate::error::Error;
+use crate::Num;
 
 use std::collections::BTreeMap;
 
 //---- Types:
 
 /// All `fasteval` Namespaces must implement the `EvalNamespace` trait.
-pub trait EvalNamespace {
-    /// Perform a variable/function lookup. 
+pub trait EvalNamespace<T: Num> {
+    /// Perform a variable/function lookup.
     ///
     /// May return cached values.
-    fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64>;
+    fn lookup(&mut self, name: &str, args: Vec<T>, keybuf: &mut String) -> Option<T>;
 }
 
 /// Cache operations for `EvalNamespace`s.
 ///
 /// Implement this trait if your Namespace type uses a cache.
-pub trait Cached {
+pub trait Cached<T: Num> {
     /// Creates a new cached entry.  If an entry with the same name already
     /// exists, an [`AlreadyExists` Error](../error/enum.Error.html#variant.AlreadyExists) is returned.
-    fn cache_create(&mut self, name:String, val:f64) -> Result<(),Error>;
+    fn cache_create(&mut self, name: String, val: T) -> Result<(), Error>;
 
     /// Sets a cached entry.  It doesn't matter whether or not a previous value
     /// existed with this name.
-    fn cache_set(   &mut self, name:String, val:f64);
+    fn cache_set(&mut self, name: String, val: T);
 
     /// Clear all cached entries.  Values will be recalculated and cached
     /// again the next time they are looked up.
@@ -239,9 +238,9 @@ pub struct EmptyNamespace;
 ///
 /// [See module-level documentation for example.](index.html#cachedcallbacknamespace)
 ///
-pub struct CachedCallbackNamespace<'a> {
-    cache:BTreeMap<String,f64>,
-    cb   :Box<dyn FnMut(&str, Vec<f64>)->Option<f64> + 'a>,  // I think a reference would be more efficient than a Box, but then I would need to use a funky 'let cb=|n|{}; Namespace::new(&cb)' syntax.  The Box results in a super convenient pass-the-cb-by-value API interface.
+pub struct CachedCallbackNamespace<'a, T: Num> {
+    cache: BTreeMap<String, T>,
+    cb: Box<dyn FnMut(&str, Vec<T>) -> Option<T> + 'a>, // I think a reference would be more efficient than a Box, but then I would need to use a funky 'let cb=|n|{}; Namespace::new(&cb)' syntax.  The Box results in a super convenient pass-the-cb-by-value API interface.
 }
 
 //// I am commenting these out until I need them in real-life.
@@ -255,40 +254,43 @@ pub struct CachedCallbackNamespace<'a> {
 //     count:usize,
 // }
 
-
 //---- Impls:
 
 #[inline(always)]
-fn key_from_nameargs<'a,'b:'a>(keybuf:&'a mut String, name:&'b str, args:&[f64]) -> &'a str {
+fn key_from_nameargs<'a, 'b: 'a, T: Num>(
+    keybuf: &'a mut String,
+    name: &'b str,
+    args: &[T],
+) -> &'a str {
     if args.is_empty() {
         name
     } else {
         keybuf.clear();
-        keybuf.reserve(name.len() + args.len()*20);
+        keybuf.reserve(name.len() + args.len() * 20);
         keybuf.push_str(name);
         for f in args {
             keybuf.push_str(" , ");
             keybuf.push_str(&f.to_string());
-        };
+        }
         keybuf.as_str()
     }
 }
 
 /// Type alias for `BTreeMap<String,f64>`
-pub type StringToF64Namespace = BTreeMap<String,f64>;
-impl EvalNamespace for StringToF64Namespace {
+pub type StringToFloatNamespace<T> = BTreeMap<String, T>;
+impl<T: Num> EvalNamespace<T> for StringToFloatNamespace<T> {
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, keybuf: &mut String) -> Option<T> {
         let key = key_from_nameargs(keybuf, name, &args);
         self.get(key).copied()
     }
 }
 
 /// Type alias for `BTreeMap<&'static str,f64>`
-pub type StrToF64Namespace = BTreeMap<&'static str,f64>;
-impl EvalNamespace for StrToF64Namespace {
+pub type StrToFloatNamespace<T> = BTreeMap<&'static str, T>;
+impl<T: Num> EvalNamespace<T> for StrToFloatNamespace<T> {
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, keybuf: &mut String) -> Option<T> {
         let key = key_from_nameargs(keybuf, name, &args);
         self.get(key).copied()
     }
@@ -299,10 +301,10 @@ impl EvalNamespace for StrToF64Namespace {
 /// This namespace type provides a very convenient way to register variables
 /// and custom functions.  It is a bit slower than a pure callback, but it has
 /// isolation and composition advantages.
-pub type StringToCallbackNamespace<'a> = BTreeMap<String, Box<dyn FnMut(Vec<f64>)->f64 + 'a>>;
-impl EvalNamespace for StringToCallbackNamespace<'_> {
+pub type StringToCallbackNamespace<'a, T> = BTreeMap<String, Box<dyn FnMut(Vec<T>) -> T + 'a>>;
+impl<T: Num> EvalNamespace<T> for StringToCallbackNamespace<'_, T> {
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, _keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, _keybuf: &mut String) -> Option<T> {
         if let Some(f) = self.get_mut(name) {
             Some(f(args))
         } else {
@@ -316,10 +318,10 @@ impl EvalNamespace for StringToCallbackNamespace<'_> {
 /// This namespace type provides a very convenient way to register variables
 /// and custom functions.  It is a bit slower than a pure callback, but it has
 /// isolation and composition advantages.
-pub type StrToCallbackNamespace<'a> = BTreeMap<&'static str, Box<dyn FnMut(Vec<f64>)->f64 + 'a>>;
-impl EvalNamespace for StrToCallbackNamespace<'_> {
+pub type StrToCallbackNamespace<'a, T> = BTreeMap<&'static str, Box<dyn FnMut(Vec<T>) -> T + 'a>>;
+impl<T: Num> EvalNamespace<T> for StrToCallbackNamespace<'_, T> {
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, _keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, _keybuf: &mut String) -> Option<T> {
         if let Some(f) = self.get_mut(name) {
             Some(f(args))
         } else {
@@ -329,69 +331,82 @@ impl EvalNamespace for StrToCallbackNamespace<'_> {
 }
 
 /// Type alias for `Vec<BTreeMap<String,f64>>`
-pub type LayeredStringToF64Namespace = Vec<BTreeMap<String,f64>>;
-impl EvalNamespace for LayeredStringToF64Namespace {
+pub type LayeredStringToFloatNamespace<T> = Vec<BTreeMap<String, T>>;
+impl<T: Num> EvalNamespace<T> for LayeredStringToFloatNamespace<T> {
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, keybuf: &mut String) -> Option<T> {
         let key = key_from_nameargs(keybuf, name, &args);
 
         for map in self.iter().rev() {
-            if let Some(&val) = map.get(key) { return Some(val); }
+            if let Some(&val) = map.get(key) {
+                return Some(val);
+            }
         }
         None
     }
 }
 
 // I'm not making a type alias for this because of the un-name-ability of closures:
-impl<F> EvalNamespace for F where F:FnMut(&str,Vec<f64>)->Option<f64> {
+impl<F, T: Num> EvalNamespace<T> for F
+where
+    F: FnMut(&str, Vec<T>) -> Option<T>,
+{
     #[inline]
-    fn lookup(&mut self, name:&str, args:Vec<f64>, _keybuf:&mut String) -> Option<f64> {
-        self(name,args)
+    fn lookup(&mut self, name: &str, args: Vec<T>, _keybuf: &mut String) -> Option<T> {
+        self(name, args)
     }
 }
 
-
-impl EvalNamespace for EmptyNamespace {
+impl<T: Num> EvalNamespace<T> for EmptyNamespace {
     /// Always returns `None`, indicating that the variable is undefined.
     #[inline]
-    fn lookup(&mut self, _name:&str, _args:Vec<f64>, _keybuf:&mut String) -> Option<f64> { None }
+    fn lookup(&mut self, _name: &str, _args: Vec<T>, _keybuf: &mut String) -> Option<T> {
+        None
+    }
 }
 
-impl EvalNamespace for CachedCallbackNamespace<'_> {
+impl<T: Num> EvalNamespace<T> for CachedCallbackNamespace<'_, T> {
     /// Returns a cached value if possible, otherwise delegates to the callback function.
-    fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64> {
+    fn lookup(&mut self, name: &str, args: Vec<T>, keybuf: &mut String) -> Option<T> {
         let key = key_from_nameargs(keybuf, name, &args);
 
-        if let Some(&val) = self.cache.get(key) { return Some(val); }
+        if let Some(&val) = self.cache.get(key) {
+            return Some(val);
+        }
 
-        match (self.cb)(name,args) {
+        match (self.cb)(name, args) {
             Some(val) => {
-                self.cache.insert(key.to_string(),val);
+                self.cache.insert(key.to_string(), val);
                 Some(val)
             }
             None => None,
         }
     }
 }
-impl Cached for CachedCallbackNamespace<'_> {
-    fn cache_create(&mut self, name:String, val:f64) -> Result<(),Error> {
-        if self.cache.contains_key(&name) { return Err(Error::AlreadyExists); }
+impl<T: Num> Cached<T> for CachedCallbackNamespace<'_, T> {
+    fn cache_create(&mut self, name: String, val: T) -> Result<(), Error> {
+        if self.cache.contains_key(&name) {
+            return Err(Error::AlreadyExists);
+        }
         self.cache.insert(name, val);
         Ok(())
     }
-    fn cache_set(&mut self, name:String, val:f64) {
+    fn cache_set(&mut self, name: String, val: T) {
         self.cache.insert(name, val);
     }
     fn cache_clear(&mut self) {
         self.cache = BTreeMap::new();
     }
 }
-impl<'a> CachedCallbackNamespace<'a> {
+impl<'a, T: Num> CachedCallbackNamespace<'a, T> {
     #[inline]
-    pub fn new<F>(cb:F) -> Self where F:FnMut(&str,Vec<f64>)->Option<f64> + 'a {
-        CachedCallbackNamespace{
-            cache:BTreeMap::new(),
-            cb   :Box::new(cb),
+    pub fn new<F>(cb: F) -> Self
+    where
+        F: FnMut(&str, Vec<T>) -> Option<T> + 'a,
+    {
+        CachedCallbackNamespace {
+            cache: BTreeMap::new(),
+            cb: Box::new(cb),
         }
     }
 }
@@ -400,11 +415,11 @@ impl<'a> CachedCallbackNamespace<'a> {
 // impl EvalNamespace for CachedLayeredNamespace<'_> {
 //     fn lookup(&mut self, name:&str, args:Vec<f64>, keybuf:&mut String) -> Option<f64> {
 //         let key = key_from_nameargs(keybuf, name, &args);
-// 
+//
 //         for map in self.caches.iter().rev() {
 //             if let Some(&val) = map.get(key) { return Some(val); }
 //         }
-// 
+//
 //         match (self.cb)(name,args) {
 //             Some(val) => {
 //                 // I'm using this panic-free 'match' structure for performance:
@@ -509,12 +524,11 @@ impl<'a> CachedCallbackNamespace<'a> {
 //     }
 // }
 
-
 //// Commented out until we start using a layered namespace again.
 // #[cfg(test)]
 // mod internal_tests {
 //     use super::*;
-// 
+//
 //     #[test]
 //     fn bubble() {
 //         let mut ns = CachedLayeredNamespace::new(|_,_| None);
@@ -532,4 +546,3 @@ impl<'a> CachedCallbackNamespace<'a> {
 //         assert_eq!(ns.caches.len(), 1);
 //     }
 // }
-

@@ -58,10 +58,10 @@ pub enum Error {
     /// A value was expected, but invalid input data was found.
     InvalidValue,
 
-    /// An error occurred during the parsing of a f64 number.
+    /// An error occurred during the parsing of a float number.
     ///
     /// The `String` field contains the data that caused the error.
-    ParseF64(String),
+    ParseFloat(String),
 
     /// The expected input data was not found.
     ///
@@ -89,8 +89,7 @@ impl std::error::Error for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f:&mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{:?}", self)  // Re-use Debug for now...
+    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+        write!(f, "{:?}", self) // Re-use Debug for now...
     }
 }
-

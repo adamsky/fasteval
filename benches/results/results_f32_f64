@@ -1,0 +1,21 @@
+running 18 tests
+test ez_f32                                     ... bench:         412 ns/iter (+/- 33)
+test ez_f64                                     ... bench:         390 ns/iter (+/- 11)
+test native_1000x_f32                           ... bench:         310 ns/iter (+/- 10)
+test native_1000x_f64                           ... bench:         310 ns/iter (+/- 28)
+test parse_compile_eval_1000x_f32               ... bench:     599,330 ns/iter (+/- 40,006)
+test parse_compile_eval_1000x_f64               ... bench:     581,233 ns/iter (+/- 43,102)
+test parse_eval_1000x_f32                       ... bench:     289,269 ns/iter (+/- 16,929)
+test parse_eval_1000x_f64                       ... bench:     285,696 ns/iter (+/- 13,492)
+test parse_eval_unsafe_1000x_f32                ... bench:     289,472 ns/iter (+/- 21,418)
+test parse_eval_unsafe_1000x_f64                ... bench:     302,460 ns/iter (+/- 17,951)
+test preparse_eval_1000x_f32                    ... bench:      72,625 ns/iter (+/- 3,310)
+test preparse_eval_1000x_f64                    ... bench:      71,326 ns/iter (+/- 2,953)
+test preparse_precompile_eval_1000x_f32         ... bench:         618 ns/iter (+/- 46)
+test preparse_precompile_eval_1000x_f64         ... bench:       1,222 ns/iter (+/- 64)
+test preparse_precompile_eval_closure_1000x_f32 ... bench:         619 ns/iter (+/- 44)
+test preparse_precompile_eval_closure_1000x_f64 ... bench:       1,223 ns/iter (+/- 58)
+test preparse_precompile_eval_unsafe_1000x_f32  ... bench:       1,222 ns/iter (+/- 66)
+test preparse_precompile_eval_unsafe_1000x_f64  ... bench:       1,222 ns/iter (+/- 75)
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 18 measured; 0 filtered out
