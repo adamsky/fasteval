@@ -1,8 +1,7 @@
-use std::collections::BTreeMap; // use this trait so we can call compile().
+use std::collections::BTreeMap;
 
-// use serde_cbor;
-use fasteval::Evaler; // use this trait so we can call eval().
-use fasteval::{Compiler, Instruction};
+use fasteval::Evaler;
+use fasteval::{Compiler, Instruction, Slab};
 
 fn main() -> Result<(), fasteval::Error> {
     let parser = fasteval::Parser::new();
@@ -16,17 +15,25 @@ fn main() -> Result<(), fasteval::Error> {
         .from(&slab.ps)
         .compile(&slab.ps, &mut slab.cs);
 
-    // serialize and deserialize compiled instruction
-    let serialized = serde_cbor::ser::to_vec_packed(&compiled).unwrap();
-    println!("{:?}", serialized);
-    let instr: Instruction = serde_cbor::from_slice(&serialized).unwrap();
+    println!("slab: {:?}", slab);
+    println!("instruction: {:?}", compiled);
+
+    // serialize both the compiled instruction and the slab
+    let slab_ser = serde_cbor::ser::to_vec_packed(&slab).unwrap();
+    let instr_ser = serde_cbor::ser::to_vec_packed(&compiled).unwrap();
+    println!("compiled slab: {:?}", slab_ser);
+    println!("compiled instruction: {:?}", instr_ser);
+
+    // deserialize
+    let slab: Slab = serde_cbor::from_slice(&slab_ser).unwrap();
+    let compiled: Instruction = serde_cbor::from_slice(&instr_ser).unwrap();
 
     // eval the instruction as usual
-    for deg in 0..360 {
+    for deg in 0..12 {
         map.insert("deg".to_string(), deg as f64);
         // When working with compiled constant expressions, you can use the
         // eval_compiled*!() macros to save a function call:
-        let val = fasteval::eval_compiled!(instr, &slab, &mut map);
+        let val = fasteval::eval_compiled!(compiled, &slab, &mut map);
         eprintln!("sin({}°) = {}", deg, val);
     }
 
