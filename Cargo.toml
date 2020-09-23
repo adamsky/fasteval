@@ -12,6 +12,7 @@ categories = ["mathematics", "science", "parser-implementations"]
 edition = "2018"
 
 [dependencies]
+num-traits = "0.2.12"
 
 [profile.bench]
 debug = true
