@@ -12,13 +12,19 @@ categories = ["mathematics", "science", "parser-implementations"]
 edition = "2018"
 
 [dependencies]
+serde = { version = "1.0.116", optional = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_cbor = "0.11.1"
 
 [profile.bench]
 debug = true
 lto = true
 
 [features]
-default = ["alpha-keywords"]
+#default = ["alpha-keywords"]
+default = ["alpha-keywords", "serialize"]
+serialize = ["serde"]
 alpha-keywords = []  # Enable 'NaN', 'inf', 'and', 'or'
 unsafe-vars = []     # tinyexpr-style pointer-based variables.
 nightly = []         # Enable features that depend on Rust nightly.
