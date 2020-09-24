@@ -608,6 +608,9 @@
 //// Keeping for reference:
 // #![cfg_attr(feature="nightly", feature(slice_index_methods))]
 
+#[macro_use]
+extern crate serde;
+
 pub mod error;
 #[macro_use]
 pub mod slab;

@@ -118,6 +118,7 @@ impl ValueI {
 }
 
 /// [See the `slab module` documentation.](index.html)
+#[cfg_attr(feature = "serde", derive(Clone, Serialize, Deserialize))]
 pub struct Slab<T: Num> {
     pub ps: ParseSlab<T>,
     pub cs: CompileSlab<T>,
@@ -211,6 +212,7 @@ pub struct Slab<T: Num> {
 /// }
 ///
 /// ```
+#[cfg_attr(feature = "serde", derive(Clone, Serialize, Deserialize))]
 pub struct ParseSlab<T: Num> {
     pub(crate) exprs: Vec<Expression<T>>,
     pub(crate) vals: Vec<Value<T>>,
@@ -222,6 +224,7 @@ pub struct ParseSlab<T: Num> {
 }
 
 /// `CompileSlab` is where `compile()` results are stored, located at `Slab.cs`.
+#[cfg_attr(feature = "serde", derive(Clone, Serialize, Deserialize))]
 pub struct CompileSlab<T: Num> {
     pub(crate) instrs: Vec<Instruction<T>>,
     pub(crate) def_instr: Instruction<T>,

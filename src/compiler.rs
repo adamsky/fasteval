@@ -61,10 +61,12 @@ macro_rules! bool_to_num {
 /// It behaves much like a pointer or reference, but it is 'safe' (unlike a raw
 /// pointer) and is not managed by the Rust borrow checker (unlike a reference).
 #[derive(Debug, PartialEq, Copy, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct InstructionI(pub usize);
 
 /// This enumeration boosts performance because it eliminates expensive function calls for constant values.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Clone, Serialize, Deserialize))]
 pub enum IC<T>
 where
     T: Num,
@@ -95,6 +97,7 @@ macro_rules! ic_to_instr {
 
 /// An `Instruction` is an optimized AST node resulting from compilation.
 #[derive(Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Clone, Serialize, Deserialize))]
 pub enum Instruction<T>
 where
     T: Num,
