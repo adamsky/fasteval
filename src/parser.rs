@@ -48,19 +48,19 @@ pub struct ValueI(pub usize);
 /// An `Expression` is the top node of a parsed AST.
 ///
 /// It can be `compile()`d or `eval()`d.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Expression {
     pub(crate) first: Value,
     pub(crate) pairs: Vec<ExprPair>, // cap=8
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub(crate) struct ExprPair(pub BinaryOp, pub Value);
 
 /// A `Value` can be a Constant, a UnaryOp, a StdFunc, or a PrintFunc.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Value {
     EConstant(f64),
@@ -71,7 +71,7 @@ pub enum Value {
 use Value::{EConstant, EPrintFunc, EStdFunc, EUnaryOp};
 
 /// Unary Operators
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum UnaryOp {
     EPos(ValueI),
@@ -105,7 +105,7 @@ pub enum BinaryOp {
 use BinaryOp::{EAdd, EDiv, EExp, EMod, EMul, ESub, EAND, EEQ, EGT, EGTE, ELT, ELTE, ENE, EOR};
 
 /// A Function Call with Standard Syntax.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum StdFunc {
     EVar(String),

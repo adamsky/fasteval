@@ -117,6 +117,7 @@ impl ValueI {
 }
 
 /// [See the `slab module` documentation.](index.html)
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Slab {
     pub ps: ParseSlab,
@@ -211,6 +212,7 @@ pub struct Slab {
 /// }
 ///
 /// ```
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ParseSlab {
     pub(crate) exprs: Vec<Expression>,
@@ -223,6 +225,7 @@ pub struct ParseSlab {
 }
 
 /// `CompileSlab` is where `compile()` results are stored, located at `Slab.cs`.
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct CompileSlab {
     pub(crate) instrs: Vec<Instruction>,
